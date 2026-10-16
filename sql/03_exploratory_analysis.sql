@@ -154,3 +154,228 @@ LIMIT 10;
 -- Top 5 complaint types account for 41.33% of sampled requests.
 -- Noise complaints appear in 3 of the top 10 categories.
 
+
+-- 2.2 Identify the 5 most common complaint types by borough
+
+with complaint_counts AS (
+	select 
+		borough,
+		complaint_type_clean,
+		count(*) as total_requests
+	from service_requests_clean src 
+	where borough is NOT NULL
+	group by borough, complaint_type_clean 
+),
+ranked_complaints AS (
+	select
+		borough, 
+		complaint_type_clean,
+		total_requests,
+		row_number() over (
+			partition by borough
+			order by total_requests DESC 
+		) as complaint_rank
+	from complaint_counts 
+)
+select 
+	borough,
+	complaint_rank,
+	complaint_type_clean,
+	total_requests
+from ranked_complaints 
+where complaint_rank <= 5
+order by borough, complaint_rank;
+
+-- Illegal Parking ranks #1 in Brooklyn, Queens, and Staten Island.
+-- Noise - Residential ranks #1 in the Bronx and Manhattan.
+-- HEAT/HOT WATER ranks #2 in the Bronx.
+-- Manhattan's top 5 includes Encampment.
+-- Borough patterns reflect sampled requests, not population-adjusted rates.
+
+
+-- 2.3 Compare Illegal Parking proportions across boroughs
+
+select 
+	borough,
+	count(*) as total_requests,
+	sum( 
+		case
+			when complaint_type_clean like 'Illegal Parking'
+			then 1
+			else 0
+		end
+	)  as illegal_parking_requests,
+	round(
+		sum( 
+			case
+				when complaint_type_clean like 'Illegal Parking'
+				then 1
+				else 0
+			end
+		) * 100.0 / count(*),
+		2
+	) as pct_illegal_parking
+from service_requests_clean src 
+where borough is not null and borough not like 'unspecified'
+group by borough
+order by pct_illegal_parking desc;
+
+-- Queens (16.37%) and Brooklyn (16.27%) had the highest
+--   proportions of Illegal Parking requests in the sample.
+-- Brooklyn had the highest count (68,418), but Queens
+--   had a slightly higher percentage.
+-- Manhattan had the lowest proportion (8.43%).
+-- Percentages reflect sampled 311 requests, not actual
+--   borough-wide complaint rates or parking prevalence.
+
+
+-- 2.4 Compare top complaint patterns by season
+
+with complaint_counts as (
+	select
+		created_season,
+		complaint_type_clean,
+		count(*) as total
+	from service_requests_clean src 
+	group by created_season, complaint_type_clean
+),
+ranked_complaints as (
+	select
+		created_season,
+		complaint_type_clean,
+		total,
+		row_number() over (
+			partition by created_season
+			order BY total desc
+		) as complaint_rank
+	from complaint_counts
+)
+select 
+	created_season,
+	complaint_rank,
+	complaint_type_clean,
+	total
+from ranked_complaints 
+where complaint_rank <=5
+order by created_season, complaint_rank;
+
+/*
+Findings:
+- Illegal Parking ranked first in fall, spring, and summer.
+- HEAT/HOT WATER ranked first in winter (52,227 requests).
+- Noise - Street/Sidewalk ranked third in summer.
+- Damaged Tree entered the top five only in summer.
+- Seasonal rankings describe the sampled records and do not
+- establish NYC-wide seasonal complaint volumes.
+*/
+
+-- 2.5 percent hot water by seasons 
+
+select
+	created_season,
+	count(*) as total,
+	sum(
+		case 
+			when complaint_type_clean = 'HEAT/HOT WATER'
+			then 1
+			else 0
+		end
+	) as heat_requests,
+	round( 
+		sum(
+			case 
+				when complaint_type_clean = 'HEAT/HOT WATER'
+				then 1
+				else 0
+			end
+		) * 100.0 / count(*),
+		2
+	) as pct_heat_requests
+from service_requests_clean src 
+group by created_season
+order by pct_heat_requests desc;
+
+/*
+Findings:
+- HEAT/HOT WATER accounted for 15.16% of winter requests,
+  compared with 1.10% during summer.
+- Fall (7.02%) and spring (5.65%) fell between these extremes.
+- This indicates a strong seasonal pattern within the sample.
+*/
+
+
+-- 2.6 Compare Heat/Hot water proportions across boroughs
+select 
+	borough,
+	count(*) as total_requests,
+	sum( 
+		case
+			when complaint_type_clean = 'HEAT/HOT WATER'
+			then 1
+			else 0
+		end
+	)  as heat_requests,
+	round(
+		sum( 
+			case
+				when complaint_type_clean = 'HEAT/HOT WATER'
+				then 1
+				else 0
+			end
+		) * 100.0 / count(*),
+		2
+	) as pct_heat
+from service_requests_clean src 
+where borough is not null and borough <> 'unspecified'
+group by borough
+order by pct_heat desc;
+
+/*
+Findings:
+- The Bronx had the highest proportion of HEAT/HOT WATER
+  requests (12.10%), followed by Manhattan (8.07%).
+- Staten Island had the lowest proportion (1.76%).
+- Results describe complaint composition within the sample,
+  not borough-wide rates of heating problems.
+*/
+
+-- 2.7 HEAT/HOT WATER by borough and season
+
+select 
+	borough,
+	created_season,
+	count(*) as total_requests,
+	sum( 
+		case
+			when complaint_type_clean = 'HEAT/HOT WATER'
+			then 1
+			else 0
+		end
+	)  as heat_requests,
+	round(
+		sum( 
+			case
+				when complaint_type_clean = 'HEAT/HOT WATER'
+				then 1
+				else 0
+			end
+		) * 100.0 / count(*),
+		2
+	) as pct_heat
+from service_requests_clean src 
+where borough is not null and borough <> 'Unspecified'
+group by borough, created_season
+order by created_season, pct_heat desc;
+
+/*
+Findings:
+- The Bronx had the highest proportion of HEAT/HOT WATER
+  requests in every season.
+- In winter, HEAT/HOT WATER accounted for 24.15% of sampled
+  Bronx requests, compared with 17.11% in Manhattan and
+  3.98% in Staten Island.
+- All five boroughs had their highest HEAT/HOT WATER
+  percentages in winter and lowest in summer.
+- These percentages describe the sampled complaint mix,
+  not population-adjusted rates of heating problems.
+*/

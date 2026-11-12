@@ -379,3 +379,24 @@ Findings:
 - These percentages describe the sampled complaint mix,
   not population-adjusted rates of heating problems.
 */
+
+
+--------------------------------------------------------
+-- 3.1 — Service Resolution Time Analysis
+--------------------------------------------------------
+
+/* 
+want to use categories that are larger. 
+*/ 
+
+select
+complaint_type_clean,
+count(*)
+from service_requests_clean
+WHERE resolution_hours IS NOT NULL
+GROUP BY complaint_type_clean
+having count(*) >= 100;
+
+-- 143 categoreis have more than 100 
+-- 217 total 
+-- 74 have less than 100 requests 
